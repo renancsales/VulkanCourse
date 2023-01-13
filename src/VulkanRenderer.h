@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <vector>
 #include <set>
+#include <algorithm>
 
 #include "Utils.h"
 
@@ -42,6 +43,7 @@ private:
 	void CreateInstance();
 	void CreateLogicalDevice();
 	void CreateSurface();
+	void CreateSwapChain();
 
 	// Get functions
 	void GetPhysicalDevice();
@@ -49,13 +51,21 @@ private:
 	// Support functions
 	// -- Check functions
 	bool CheckInstanceExtensionSupport(std::vector<const char*>* checkExtensions);
+	bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
 	bool CheckDeviceSuitable(VkPhysicalDevice device);
 	// -- getter functions
 	QueueFamilyIndices& GetQueueFamilies(VkPhysicalDevice device);
+	SwapChainDetails GetSwapChainDetails(VkPhysicalDevice device);
 
-
+	// -- pick functions
+	VkSurfaceFormatKHR ChooseBestSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
+	VkPresentModeKHR ChooseBestPresentationMode(const std::vector< VkPresentModeKHR>& presentationModes);
+	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities);
 	// validatation layer
 	bool CheckValidationLayerSupport();
+
+	// -- Create functions
+	VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
 
 private:
 	GLFWwindow* m_Window;
@@ -67,4 +77,11 @@ private:
 	VkQueue m_PresentationQueue;
 
 	VkSurfaceKHR m_Surface;
+	VkSwapchainKHR m_Swapchain;
+
+	std::vector<SwapChainImage> m_SwapChainImages;
+
+	// Utilities
+	VkFormat m_SwapchainImageFormat;
+	VkExtent2D m_SwapchainExtent;
 };
