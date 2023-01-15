@@ -44,6 +44,7 @@ private:
 	void CreateLogicalDevice();
 	void CreateSurface();
 	void CreateSwapChain();
+	void CreateGraphicsPipeline();
 
 	// Get functions
 	void GetPhysicalDevice();
@@ -66,6 +67,7 @@ private:
 
 	// -- Create functions
 	VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+	VkShaderModule CreateShaderModule(const std::vector<char>& code);
 
 private:
 	GLFWwindow* m_Window;

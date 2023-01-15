@@ -1,8 +1,12 @@
 #pragma once
 
+#include <fstream>
+
 static const std::vector<const char*> s_DeviceExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
+
+
 
 // Indices (locations) of queue families (if they exist at all)
 struct QueueFamilyIndices
@@ -28,3 +32,30 @@ struct SwapChainImage
 	VkImage Image;
 	VkImageView ImageView;
 };
+
+
+static std::vector<char> readSPVFile(const std::string& filename)
+{
+	//open file
+	std::ifstream file(filename, std::ios::binary | std::ios::ate);
+
+	// Check 
+	if (!file.is_open())
+	{
+		throw std::runtime_error("Failed to open a file in readSPVFile");
+	}
+
+	// get size and create vector
+	size_t fileSize = (size_t)file.tellg();
+	std::vector<char> fileBuffer(fileSize);
+
+	// move read position to the start of the file
+	file.seekg(0);
+
+	// Read the file data into the bufer
+	file.read(fileBuffer.data(), fileSize);
+
+	file.close();
+
+	return fileBuffer;
+}
