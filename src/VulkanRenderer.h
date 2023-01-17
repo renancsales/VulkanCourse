@@ -83,6 +83,8 @@ private:
 
 	std::vector<SwapChainImage> m_SwapChainImages;
 
+	VkPipelineLayout m_PipelineLayout;
+
 	// Utilities
 	VkFormat m_SwapchainImageFormat;
 	VkExtent2D m_SwapchainExtent;

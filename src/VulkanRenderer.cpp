@@ -30,6 +30,7 @@ int VulkanRenderer::Init(GLFWwindow* window)
 
 void VulkanRenderer::CleanUp()
 {
+	vkDestroyPipelineLayout(m_MainDevice.LogicalDevice, m_PipelineLayout, nullptr);
 	for (auto image : m_SwapChainImages)
 	{
 		vkDestroyImageView(m_MainDevice.LogicalDevice, image.ImageView, nullptr);
@@ -304,6 +305,113 @@ void VulkanRenderer::CreateGraphicsPipeline()
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertexShaderCreateInfo , fragmentShaderCreateInfo };
 	
 	// Create PIPELINE
+	// -- Vertex Input (To do)
+	VkPipelineVertexInputStateCreateInfo vertexInputCreateInfo = {};
+	vertexInputCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputCreateInfo.vertexBindingDescriptionCount = 0;
+	vertexInputCreateInfo.pVertexBindingDescriptions = nullptr; // list of binding description (data spacing, stride info)
+	vertexInputCreateInfo.vertexAttributeDescriptionCount = 0;
+	vertexInputCreateInfo.pVertexAttributeDescriptions = nullptr; // list of vertex attribite descriptions(data format and where to binding)
+
+	// -- Input Assembly
+	VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo = {};
+	inputAssemblyCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssemblyCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	inputAssemblyCreateInfo.primitiveRestartEnable = VK_FALSE;		// Allow overrinding of `strip` topology to start new primitives
+
+	// -- Viewport & Scissor
+	// Create a viewport info struct
+	VkViewport viewport = {};
+	viewport.x = 0.0f; viewport.y = 0.0f;  // start coordinates
+	viewport.width = (float)m_SwapchainExtent.width;  // viewport width and height
+	viewport.height = (float)m_SwapchainExtent.height;
+	viewport.minDepth = 0.0f; viewport.maxDepth = 1.0f;
+
+	// Create a scissor info struct
+	VkRect2D scissor = {};
+	scissor.offset = { 0,0 };		// offset to use region from
+	scissor.extent = m_SwapchainExtent; // extent to describe region to use, starting at offset
+
+	//
+	VkPipelineViewportStateCreateInfo viewportStateCreateInfo = {};
+	viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportStateCreateInfo.viewportCount = 1;
+	viewportStateCreateInfo.pViewports = &viewport;
+	viewportStateCreateInfo.scissorCount = 1;
+	viewportStateCreateInfo.pScissors = &scissor;
+
+	// -- Dynamic States
+	// Dynamic states to enable
+	std::vector<VkDynamicState> dynamicStateEnables;
+	dynamicStateEnables.push_back(VK_DYNAMIC_STATE_VIEWPORT); // dynamic viewport: can resize in command buffer with vkCmdSetViewport(commandbuffer,0, 1, &viewport)
+	dynamicStateEnables.push_back(VK_DYNAMIC_STATE_SCISSOR); // dynamic scissor: can resize in command buffer scissor vkCmdSetScissor(commandbuffer, 0, 1, &scissor)
+
+	// dynamic state create info
+	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
+	dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStateEnables.size());
+	dynamicStateCreateInfo.pDynamicStates = dynamicStateEnables.data();
+
+	// -- Rasterizer
+	// Convert primitive into fragments
+	VkPipelineRasterizationStateCreateInfo rasterizerCreateInfo = {};
+	rasterizerCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizerCreateInfo.depthClampEnable = VK_FALSE;		// Change if fragments beyond near/far planes are clipped (default) or clamped to plane (To use we need to set device feature of GPU)
+	rasterizerCreateInfo.rasterizerDiscardEnable = VK_FALSE; //Whether to discard data and skip rasterizer. Never creates framents, only suitable for pipeline without framebuffer output
+	rasterizerCreateInfo.polygonMode = VK_POLYGON_MODE_FILL; // how to handle filling points between vertices
+	rasterizerCreateInfo.lineWidth = 1.0f;		// how thick line should be when drawn (for > 1.0f it is need to enable on gpu)
+	rasterizerCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;	// which face of a triangle to cull
+	rasterizerCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE; // winding to determine which side is front
+	rasterizerCreateInfo.depthBiasEnable = VK_FALSE;		// Whether to add depth bias to fragments (good for stopping `shadow acne` in shadow mapping)
+
+	// -- Multisampling
+	VkPipelineMultisampleStateCreateInfo multisamplingCreateInfo = {};
+	multisamplingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisamplingCreateInfo.sampleShadingEnable = VK_FALSE;
+	multisamplingCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;	// number of samples to use per fragment
+
+	// -- Blending
+
+	// Blending attachment state (how blending is handled)
+	VkPipelineColorBlendAttachmentState colorState = {};
+	colorState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+								|VK_COLOR_COMPONENT_B_BIT  | VK_COLOR_COMPONENT_A_BIT;  // colors to apply blending to
+	colorState.blendEnable = VK_TRUE;	
+	// Blending uses equation: (srcColorBlendFactor * new color) colorBlendOp(dstColorBlendFactor * old color)
+	colorState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorState.colorBlendOp = VK_BLEND_OP_ADD;
+	colorState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorState.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	VkPipelineColorBlendStateCreateInfo colorBlendingCreateInfo = {};
+	colorBlendingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlendingCreateInfo.logicOpEnable = VK_FALSE;
+	colorBlendingCreateInfo.logicOp = VK_LOGIC_OP_COPY;
+	colorBlendingCreateInfo.attachmentCount = 1;
+	colorBlendingCreateInfo.pAttachments = &colorState;
+
+	// -- Pipeline layout (todo: apply future descriptor set layout)
+	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutCreateInfo.setLayoutCount = 0;
+	pipelineLayoutCreateInfo.pSetLayouts = nullptr;
+	pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+	pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+
+	// Create pipeline layout
+	VkResult result = vkCreatePipelineLayout(m_MainDevice.LogicalDevice, &pipelineLayoutCreateInfo, nullptr, &m_PipelineLayout);
+	if (result != VK_SUCCESS)
+	{
+		throw std::runtime_error("Failed to create pipeline layout!");
+	}
+
+	// -- Depth Stencil Testing
+	// TODO: Set up depth stencil testing
+
+
+	// -- Render Pass
 
 	// Destroy shader modules
 	vkDestroyShaderModule(m_MainDevice.LogicalDevice, fragmentShaderModule, nullptr);
