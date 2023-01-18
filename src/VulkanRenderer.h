@@ -10,6 +10,7 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <array>
 
 #include "Utils.h"
 
@@ -44,6 +45,7 @@ private:
 	void CreateLogicalDevice();
 	void CreateSurface();
 	void CreateSwapChain();
+	void CreateRenderPass();
 	void CreateGraphicsPipeline();
 
 	// Get functions
@@ -83,7 +85,10 @@ private:
 
 	std::vector<SwapChainImage> m_SwapChainImages;
 
+	// -- Pipeline
+	VkPipeline m_GraphicsPipeline;
 	VkPipelineLayout m_PipelineLayout;
+	VkRenderPass m_RenderPass;
 
 	// Utilities
 	VkFormat m_SwapchainImageFormat;

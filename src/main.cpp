@@ -5,8 +5,8 @@
 
 #include "VulkanRenderer.h"
 
-GLFWwindow* g_Window; // global var
-VulkanRenderer g_VulkanRenderer;
+static GLFWwindow* g_Window; // global var
+static VulkanRenderer g_VulkanRenderer;
 
 void initWindow(std::string wname = "test window", const int width = 800, const int height = 600)
 {
