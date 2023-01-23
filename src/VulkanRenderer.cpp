@@ -19,6 +19,11 @@ int VulkanRenderer::Init(GLFWwindow* window)
 		CreateSwapChain();
 		CreateRenderPass();
 		CreateGraphicsPipeline();
+		CreateFramebuffers();
+		CreateCommandPool();
+		CreateCommandBuffers();
+		RecordCommands();
+		CreateSynchronization();
 	}
 	catch (const std::runtime_error& e)
 	{
@@ -29,8 +34,71 @@ int VulkanRenderer::Init(GLFWwindow* window)
 	return 0;
 }
 
+void VulkanRenderer::Draw()
+{
+	// 1. Get next available image to draw to and set something to signal when we're finished
+	// with the image (a semaphore)
+	
+	// -- Get next image
+	uint32_t imageIndex;
+	vkAcquireNextImageKHR(m_MainDevice.LogicalDevice, m_Swapchain, std::numeric_limits<uint64_t>::max(), m_SemaphoreImageAvailable,
+		VK_NULL_HANDLE, &imageIndex);
+
+
+	// 2. Submit command buffer to queue for execution, make sure it watis for the image to be 
+	// signalled as available before drawing and signals when it has finished rendering
+	// -- Submit command buffer to render
+	// Queue submission info
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.waitSemaphoreCount = 1;				// number of semaphores to wait on
+	submitInfo.pWaitSemaphores = &m_SemaphoreImageAvailable;
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	submitInfo.pWaitDstStageMask = waitStages;  // Stages to check semaphores at
+	submitInfo.commandBufferCount = 1;			// number of command buffer to submit
+	submitInfo.pCommandBuffers = &m_CommandBuffers[imageIndex];
+	submitInfo.signalSemaphoreCount = 1;		// number of semaphores to signal
+	submitInfo.pSignalSemaphores = &m_SemaphoreRenderFinished;		// Semaphores to signal when command buffer finishes
+
+	// Submit command buffer to queue
+	VkResult result = vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	if (result != VK_SUCCESS)
+	{
+		throw std::runtime_error("Failed to command buffer to queue!");
+	}
+
+	// 3. Present image to screen when it has signalled finished rendering
+	// Present rendered image to screen
+	VkPresentInfoKHR presentInfo = {};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.waitSemaphoreCount = 1;
+	presentInfo.pWaitSemaphores = &m_SemaphoreRenderFinished;		// semaphores to wait on
+	presentInfo.swapchainCount = 1;
+	presentInfo.pSwapchains = &m_Swapchain;		// Swapchain to present images to
+	presentInfo.pImageIndices = &imageIndex;	// index of images in swapchain to present
+
+	result = vkQueuePresentKHR(m_PresentationQueue, &presentInfo);
+	if (result != VK_SUCCESS)
+	{
+		throw std::runtime_error("Failed to present rendererd image to screen!");
+	}
+
+}
+
 void VulkanRenderer::CleanUp()
 {
+	// Wait until no action being run on device before destroying
+	vkDeviceWaitIdle(m_MainDevice.LogicalDevice);
+
+	vkDestroySemaphore(m_MainDevice.LogicalDevice, m_SemaphoreImageAvailable, nullptr);
+	vkDestroySemaphore(m_MainDevice.LogicalDevice, m_SemaphoreRenderFinished, nullptr);
+	vkDestroyCommandPool(m_MainDevice.LogicalDevice, m_GraphicsCommandPool, nullptr);
+
+	for (size_t i = 0; i < m_SwapChainFramebuffers.size(); i++)
+	{
+		vkDestroyFramebuffer(m_MainDevice.LogicalDevice, m_SwapChainFramebuffers[i], nullptr);
+	}
+
 	vkDestroyPipeline(m_MainDevice.LogicalDevice, m_GraphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(m_MainDevice.LogicalDevice, m_PipelineLayout, nullptr);
 	vkDestroyRenderPass(m_MainDevice.LogicalDevice, m_RenderPass, nullptr);
@@ -415,8 +483,8 @@ void VulkanRenderer::CreateGraphicsPipeline()
 	// -- Dynamic States
 	// Dynamic states to enable
 	std::vector<VkDynamicState> dynamicStateEnables;
-	dynamicStateEnables.push_back(VK_DYNAMIC_STATE_VIEWPORT); // dynamic viewport: can resize in command buffer with vkCmdSetViewport(commandbuffer,0, 1, &viewport)
-	dynamicStateEnables.push_back(VK_DYNAMIC_STATE_SCISSOR); // dynamic scissor: can resize in command buffer scissor vkCmdSetScissor(commandbuffer, 0, 1, &scissor)
+	// dynamicStateEnables.push_back(VK_DYNAMIC_STATE_VIEWPORT); // dynamic viewport: can resize in command buffer with vkCmdSetViewport(commandbuffer,0, 1, &viewport)
+	// dynamicStateEnables.push_back(VK_DYNAMIC_STATE_SCISSOR); // dynamic scissor: can resize in command buffer scissor vkCmdSetScissor(commandbuffer, 0, 1, &scissor)
 
 	// dynamic state create info
 	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
@@ -518,6 +586,141 @@ void VulkanRenderer::CreateGraphicsPipeline()
 	vkDestroyShaderModule(m_MainDevice.LogicalDevice, vertexShaderModule, nullptr);
 }
 
+void VulkanRenderer::CreateFramebuffers()
+{
+	// Resize framebuffer count to equal the swapchain images count
+	m_SwapChainFramebuffers.resize(m_SwapChainImages.size());
+
+	// Create a framebuffer for each swapchain image
+	for (size_t i = 0; i < m_SwapChainFramebuffers.size(); i++)
+	{
+		std::array<VkImageView, 1> attachments = {
+			m_SwapChainImages[i].ImageView
+		};
+
+		VkFramebufferCreateInfo framebufferCreateInfo = {};
+		framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebufferCreateInfo.renderPass = m_RenderPass;			//Render pass layout that framebuffer will be used with
+		framebufferCreateInfo.attachmentCount = static_cast<uint32_t>(attachments.size()); 
+		framebufferCreateInfo.pAttachments = attachments.data();  // list of attachments (1:1 with render pass)
+		framebufferCreateInfo.width = m_SwapchainExtent.width;
+		framebufferCreateInfo.height = m_SwapchainExtent.height;
+		framebufferCreateInfo.layers = 1;
+
+		VkResult result = vkCreateFramebuffer(m_MainDevice.LogicalDevice, &framebufferCreateInfo, nullptr, &m_SwapChainFramebuffers[i]);
+		
+		if (result != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create a framebuffer!");
+		}
+	}
+}
+
+void VulkanRenderer::CreateCommandPool()
+{
+	// Get indices of queue families from device
+	QueueFamilyIndices queueFamilyIndices = GetQueueFamilies(m_MainDevice.PhysicalDevice);
+
+	VkCommandPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.queueFamilyIndex = queueFamilyIndices.GraphicsFamily;	//Queue family type that buffers from this command pool will use
+
+	// Create graphics queue family command pool
+	VkResult result = vkCreateCommandPool(m_MainDevice.LogicalDevice, &poolInfo, nullptr, &m_GraphicsCommandPool);
+	if (result != VK_SUCCESS)
+	{
+		throw std::runtime_error("Failed to create command pool!");
+	}
+}
+
+void VulkanRenderer::CreateCommandBuffers()
+{
+	// Resize command buffer count to have one for each framebuffer
+	m_CommandBuffers.resize(m_SwapChainFramebuffers.size());
+
+	VkCommandBufferAllocateInfo commandBufferAllocateInfo = {};
+	commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	commandBufferAllocateInfo.commandPool = m_GraphicsCommandPool;
+	commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY; // VK_COMMAND_BUFFER_LEVEL_PRIMARY : buffer you submit directly to queue. Cant be called by other buffer.
+																	   // VK_COMMAND_BUFFER_LEVEL_SECONDARY : buffer cant be called directly. Can be called from other buffers via vkCmdExecuteCommand when recording commands in primary buffer
+	commandBufferAllocateInfo.commandBufferCount = static_cast<uint32_t>(m_CommandBuffers.size());
+	
+	// Allocate command buffer and place handles in array of buffers
+	VkResult result = vkAllocateCommandBuffers(m_MainDevice.LogicalDevice, &commandBufferAllocateInfo, m_CommandBuffers.data());
+	if (result != VK_SUCCESS)
+	{
+		throw std::runtime_error("Failed to allocate Command Buffers!");
+	}
+}
+
+void VulkanRenderer::CreateSynchronization()
+{
+	// Semaphore creation information
+	VkSemaphoreCreateInfo semaphoreCreateInfo = {};
+	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+	if (vkCreateSemaphore(m_MainDevice.LogicalDevice, &semaphoreCreateInfo, nullptr, &m_SemaphoreImageAvailable) != VK_SUCCESS ||
+		vkCreateSemaphore(m_MainDevice.LogicalDevice, &semaphoreCreateInfo, nullptr, &m_SemaphoreRenderFinished) != VK_SUCCESS)
+	{
+		throw std::runtime_error("Failed to create semaphore!");
+	}
+}
+
+void VulkanRenderer::RecordCommands()
+{
+	// Info about how to begin each command buffer
+	VkCommandBufferBeginInfo bufferBeginInfo = { };
+	bufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	bufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;  // buffer can be resubmitted when it has already been submitted and is awaiting
+	
+	// Info about how to beging a render pass (only need for graphical applications)
+	VkRenderPassBeginInfo renderPassBeginInfo = {};
+	renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassBeginInfo.renderPass = m_RenderPass;		// Render pass to begin
+	renderPassBeginInfo.renderArea.offset = { 0, 0 };	// start point of render pass in pixel
+	renderPassBeginInfo.renderArea.extent = m_SwapchainExtent;	// size of region to run render pass on (starting at offset)
+	VkClearValue clearValues[] = {
+		{0.20f, 0.10f, 0.40f, 1.0f}
+	};
+	renderPassBeginInfo.pClearValues = clearValues;			// list of clear values (todo: depth attachment clear value)
+	renderPassBeginInfo.clearValueCount = 1;
+
+
+	for (size_t i = 0; i < m_CommandBuffers.size(); i++)
+	{
+
+		renderPassBeginInfo.framebuffer = m_SwapChainFramebuffers[i];
+
+		// Start recording commands to command buffer
+		VkResult result  = vkBeginCommandBuffer(m_CommandBuffers[i], &bufferBeginInfo);
+		if (result != VK_SUCCESS)
+			throw std::runtime_error("Failed to start recording a Command buffer!");
+
+			// Begin Render Pass
+			vkCmdBeginRenderPass(m_CommandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				// Bind pipeline to be used in render pass
+				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+				
+				//vkCmdSetViewport(m_CommandBuffers[i],0,0,m_)
+				// Execute Pipeline
+				vkCmdDraw(m_CommandBuffers[i], 3, 1, 0, 0);
+
+			// End Render Pass
+			vkCmdEndRenderPass(m_CommandBuffers[i]);
+
+		// Stop recording commands to command buffer
+		result  = vkEndCommandBuffer(m_CommandBuffers[i]);
+		if (result != VK_SUCCESS)
+			throw std::runtime_error("Failed to stop recording a Command buffer!");
+
+
+	}
+
+
+	// vkBeginCommandBuffer();
+}
+
 bool VulkanRenderer::CheckInstanceExtensionSupport(std::vector<const char*>* checkExtensions)
 {
 
@@ -597,7 +800,7 @@ bool VulkanRenderer::CheckDeviceSuitable(VkPhysicalDevice device)
 	vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 #endif
 
-	QueueFamilyIndices& indices = GetQueueFamilies(device);
+	QueueFamilyIndices indices = GetQueueFamilies(device);
 
 	bool hasExtensionsSupported = CheckDeviceExtensionSupport(device);
 
@@ -611,7 +814,7 @@ bool VulkanRenderer::CheckDeviceSuitable(VkPhysicalDevice device)
 	return indices.IsValid() && hasExtensionsSupported && swapChainValid;
 }
 
-QueueFamilyIndices& VulkanRenderer::GetQueueFamilies(VkPhysicalDevice device)
+QueueFamilyIndices VulkanRenderer::GetQueueFamilies(VkPhysicalDevice device)
 {
 	QueueFamilyIndices indices;
 

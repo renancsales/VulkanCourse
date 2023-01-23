@@ -34,12 +34,16 @@ int main()
 	while (!glfwWindowShouldClose(g_Window))
 	{
 		glfwPollEvents();
+		g_VulkanRenderer.Draw();
 	}
 
-	g_VulkanRenderer.CleanUp();
+	
 
 	// destroy glfw window and stop glfw
 	glfwDestroyWindow(g_Window);
 	glfwTerminate();
+
+	g_VulkanRenderer.CleanUp();
+
 	return 0;
 }

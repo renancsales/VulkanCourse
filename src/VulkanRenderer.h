@@ -36,7 +36,7 @@ public:
 
 public:
 	int Init(GLFWwindow* window);
-
+	void Draw();
 	void CleanUp();
 
 private:
@@ -47,6 +47,13 @@ private:
 	void CreateSwapChain();
 	void CreateRenderPass();
 	void CreateGraphicsPipeline();
+	void CreateFramebuffers();
+	void CreateCommandPool();
+	void CreateCommandBuffers();
+	void CreateSynchronization();
+
+	// Recodrd functions
+	void RecordCommands();
 
 	// Get functions
 	void GetPhysicalDevice();
@@ -57,7 +64,7 @@ private:
 	bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
 	bool CheckDeviceSuitable(VkPhysicalDevice device);
 	// -- getter functions
-	QueueFamilyIndices& GetQueueFamilies(VkPhysicalDevice device);
+	QueueFamilyIndices GetQueueFamilies(VkPhysicalDevice device);
 	SwapChainDetails GetSwapChainDetails(VkPhysicalDevice device);
 
 	// -- pick functions
@@ -70,11 +77,11 @@ private:
 	// -- Create functions
 	VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
 	VkShaderModule CreateShaderModule(const std::vector<char>& code);
-
+	
 private:
 	GLFWwindow* m_Window;
 
-	// vulkan components
+	// -- Vulkan components
 	VkInstance m_Instance;
 	Devices m_MainDevice;
 	VkQueue m_GraphicsQueue;
@@ -84,13 +91,22 @@ private:
 	VkSwapchainKHR m_Swapchain;
 
 	std::vector<SwapChainImage> m_SwapChainImages;
+	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
+	std::vector<VkCommandBuffer> m_CommandBuffers;
 
 	// -- Pipeline
 	VkPipeline m_GraphicsPipeline;
 	VkPipelineLayout m_PipelineLayout;
 	VkRenderPass m_RenderPass;
 
+	// -- Pools
+	VkCommandPool m_GraphicsCommandPool;
+
 	// Utilities
 	VkFormat m_SwapchainImageFormat;
 	VkExtent2D m_SwapchainExtent;
+
+	// - Synchronization
+	VkSemaphore m_SemaphoreImageAvailable;
+	VkSemaphore m_SemaphoreRenderFinished;
 };
