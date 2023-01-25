@@ -84,10 +84,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\Mesh.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\VulkanRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\Mesh.h" />
     <ClInclude Include="src\Utils.h" />
     <ClInclude Include="src\VulkanRenderer.h" />
   </ItemGroup>

@@ -16,6 +16,15 @@ int VulkanRenderer::Init(GLFWwindow* window)
 		CreateSurface();
 		GetPhysicalDevice();
 		CreateLogicalDevice();
+
+		// Create mesh object
+		std::vector<Vertex> meshVertices = {
+			{{0.0, -0.4, 0.0}}, 
+			{{0.4, 0.4, 0.0}},
+			{{-0.4, 0.4, 0.0}}
+		};
+		m_MeshObject = Mesh(m_MainDevice.PhysicalDevice, m_MainDevice.LogicalDevice, &meshVertices);
+		
 		CreateSwapChain();
 		CreateRenderPass();
 		CreateGraphicsPipeline();
@@ -39,11 +48,15 @@ void VulkanRenderer::Draw()
 	// 1. Get next available image to draw to and set something to signal when we're finished
 	// with the image (a semaphore)
 	
+	// Wait for given fence to signal (open) from last draw before continuing
+	vkWaitForFences(m_MainDevice.LogicalDevice, 1, &m_DrawFences[m_CurrentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+	// Manually reset (close) fences
+	vkResetFences(m_MainDevice.LogicalDevice, 1, &m_DrawFences[m_CurrentFrame]);
+
 	// -- Get next image
 	uint32_t imageIndex;
-	vkAcquireNextImageKHR(m_MainDevice.LogicalDevice, m_Swapchain, std::numeric_limits<uint64_t>::max(), m_SemaphoreImageAvailable,
+	vkAcquireNextImageKHR(m_MainDevice.LogicalDevice, m_Swapchain, std::numeric_limits<uint64_t>::max(), m_SemaphoresImageAvailable[m_CurrentFrame],
 		VK_NULL_HANDLE, &imageIndex);
-
 
 	// 2. Submit command buffer to queue for execution, make sure it watis for the image to be 
 	// signalled as available before drawing and signals when it has finished rendering
@@ -52,16 +65,16 @@ void VulkanRenderer::Draw()
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.waitSemaphoreCount = 1;				// number of semaphores to wait on
-	submitInfo.pWaitSemaphores = &m_SemaphoreImageAvailable;
+	submitInfo.pWaitSemaphores = &m_SemaphoresImageAvailable[m_CurrentFrame];
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	submitInfo.pWaitDstStageMask = waitStages;  // Stages to check semaphores at
 	submitInfo.commandBufferCount = 1;			// number of command buffer to submit
 	submitInfo.pCommandBuffers = &m_CommandBuffers[imageIndex];
 	submitInfo.signalSemaphoreCount = 1;		// number of semaphores to signal
-	submitInfo.pSignalSemaphores = &m_SemaphoreRenderFinished;		// Semaphores to signal when command buffer finishes
+	submitInfo.pSignalSemaphores = &m_SemaphoresRenderFinished[m_CurrentFrame];		// Semaphores to signal when command buffer finishes
 
 	// Submit command buffer to queue
-	VkResult result = vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	VkResult result = vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_DrawFences[m_CurrentFrame]);
 	if (result != VK_SUCCESS)
 	{
 		throw std::runtime_error("Failed to command buffer to queue!");
@@ -72,7 +85,7 @@ void VulkanRenderer::Draw()
 	VkPresentInfoKHR presentInfo = {};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &m_SemaphoreRenderFinished;		// semaphores to wait on
+	presentInfo.pWaitSemaphores = &m_SemaphoresRenderFinished[m_CurrentFrame];		// semaphores to wait on
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = &m_Swapchain;		// Swapchain to present images to
 	presentInfo.pImageIndices = &imageIndex;	// index of images in swapchain to present
@@ -83,6 +96,8 @@ void VulkanRenderer::Draw()
 		throw std::runtime_error("Failed to present rendererd image to screen!");
 	}
 
+	// only for max_frame_draw = 2
+	m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAME_DRAWS;
 }
 
 void VulkanRenderer::CleanUp()
@@ -90,8 +105,15 @@ void VulkanRenderer::CleanUp()
 	// Wait until no action being run on device before destroying
 	vkDeviceWaitIdle(m_MainDevice.LogicalDevice);
 
-	vkDestroySemaphore(m_MainDevice.LogicalDevice, m_SemaphoreImageAvailable, nullptr);
-	vkDestroySemaphore(m_MainDevice.LogicalDevice, m_SemaphoreRenderFinished, nullptr);
+	m_MeshObject.DestroyVertexBuffer();
+
+	for (size_t i = 0; i < MAX_FRAME_DRAWS; i++)
+	{
+		vkDestroySemaphore(m_MainDevice.LogicalDevice, m_SemaphoresImageAvailable[i], nullptr);
+		vkDestroySemaphore(m_MainDevice.LogicalDevice, m_SemaphoresRenderFinished[i], nullptr);
+		vkDestroyFence(m_MainDevice.LogicalDevice, m_DrawFences[i], nullptr);
+	}
+
 	vkDestroyCommandPool(m_MainDevice.LogicalDevice, m_GraphicsCommandPool, nullptr);
 
 	for (size_t i = 0; i < m_SwapChainFramebuffers.size(); i++)
@@ -443,15 +465,35 @@ void VulkanRenderer::CreateGraphicsPipeline()
 
 	// put shader state creation info in to array
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertexShaderCreateInfo , fragmentShaderCreateInfo };
+
+	// How the data for a single vertex (including info such as position, color, texture coordinates, normals, etc) is as in whole
+	VkVertexInputBindingDescription bindingDescription = {};
+	bindingDescription.binding = 0;			// Can bind multiple streams of data, this defines which one
+	bindingDescription.stride = sizeof(Vertex);		// size of a single vertex object
+	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;	// How to move between data after each vertex
+																// VK_VERTEX_INPUT_RATE_INSTANCE: move to a vertex for next 
+
+	// How the data for an attribute is defined within a vertex
+	std::array<VkVertexInputAttributeDescription, 1> attributeDescriptions;
+
+	// Position attribute
+	attributeDescriptions[0].binding = 0;
+	attributeDescriptions[0].location = 0;			// location in shader wherre data will be read from
+	attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;  // format the data will take (also it helps define size opf data)
+	attributeDescriptions[0].offset = offsetof(Vertex, Position); // where this attribute is defined in the data for a single vertex
+
+	// Color attribute 
+	// To do
 	
 	// Create PIPELINE
 	// -- Vertex Input (To do)
 	VkPipelineVertexInputStateCreateInfo vertexInputCreateInfo = {};
 	vertexInputCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputCreateInfo.vertexBindingDescriptionCount = 0;
-	vertexInputCreateInfo.pVertexBindingDescriptions = nullptr; // list of binding description (data spacing, stride info)
-	vertexInputCreateInfo.vertexAttributeDescriptionCount = 0;
-	vertexInputCreateInfo.pVertexAttributeDescriptions = nullptr; // list of vertex attribite descriptions(data format and where to binding)
+	vertexInputCreateInfo.vertexBindingDescriptionCount = 1;
+	vertexInputCreateInfo.pVertexBindingDescriptions = &bindingDescription; // list of binding description (data spacing, stride info)
+	vertexInputCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+	vertexInputCreateInfo.pVertexAttributeDescriptions = attributeDescriptions.data(); // list of vertex attribite descriptions(data format and where to binding)
+
 
 	// -- Input Assembly
 	VkPipelineInputAssemblyStateCreateInfo inputAssemblyCreateInfo = {};
@@ -655,14 +697,27 @@ void VulkanRenderer::CreateCommandBuffers()
 
 void VulkanRenderer::CreateSynchronization()
 {
+	m_SemaphoresImageAvailable.resize(MAX_FRAME_DRAWS);
+	m_SemaphoresRenderFinished.resize(MAX_FRAME_DRAWS);
+	m_DrawFences.resize(MAX_FRAME_DRAWS);
+
 	// Semaphore creation information
 	VkSemaphoreCreateInfo semaphoreCreateInfo = {};
 	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-	if (vkCreateSemaphore(m_MainDevice.LogicalDevice, &semaphoreCreateInfo, nullptr, &m_SemaphoreImageAvailable) != VK_SUCCESS ||
-		vkCreateSemaphore(m_MainDevice.LogicalDevice, &semaphoreCreateInfo, nullptr, &m_SemaphoreRenderFinished) != VK_SUCCESS)
+	// Fence creation info
+	VkFenceCreateInfo fenceCreateInfo = {};
+	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+	for (size_t i = 0; i < MAX_FRAME_DRAWS; i++)
 	{
-		throw std::runtime_error("Failed to create semaphore!");
+		if (vkCreateSemaphore(m_MainDevice.LogicalDevice, &semaphoreCreateInfo, nullptr, &m_SemaphoresImageAvailable[i]) != VK_SUCCESS ||
+			vkCreateSemaphore(m_MainDevice.LogicalDevice, &semaphoreCreateInfo, nullptr, &m_SemaphoresRenderFinished[i]) != VK_SUCCESS || 
+			vkCreateFence(m_MainDevice.LogicalDevice, &fenceCreateInfo, nullptr, &m_DrawFences[i]) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create semaphore and/or fence!");
+		}
 	}
 }
 
@@ -671,7 +726,7 @@ void VulkanRenderer::RecordCommands()
 	// Info about how to begin each command buffer
 	VkCommandBufferBeginInfo bufferBeginInfo = { };
 	bufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	bufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;  // buffer can be resubmitted when it has already been submitted and is awaiting
+	// bufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;  // buffer can be resubmitted when it has already been submitted and is awaiting
 	
 	// Info about how to beging a render pass (only need for graphical applications)
 	VkRenderPassBeginInfo renderPassBeginInfo = {};
@@ -702,9 +757,14 @@ void VulkanRenderer::RecordCommands()
 				// Bind pipeline to be used in render pass
 				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
 				
+				VkBuffer vertexBuffers[] = { m_MeshObject.GetVertexBuffer() };	// Buffer to bind
+				VkDeviceSize offsets[] = { 0 };		// offsets into buffers being bound
+				vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, vertexBuffers, offsets);	// Command to bind vertex buffer before drawing with them
+
+
 				//vkCmdSetViewport(m_CommandBuffers[i],0,0,m_)
 				// Execute Pipeline
-				vkCmdDraw(m_CommandBuffers[i], 3, 1, 0, 0);
+				vkCmdDraw(m_CommandBuffers[i], static_cast<uint32_t>(m_MeshObject.GetVertexCount()), 1, 0, 0);
 
 			// End Render Pass
 			vkCmdEndRenderPass(m_CommandBuffers[i]);

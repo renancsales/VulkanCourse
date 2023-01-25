@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 
+#include "Mesh.h"
 #include "Utils.h"
 
 
@@ -81,6 +82,11 @@ private:
 private:
 	GLFWwindow* m_Window;
 
+	int m_CurrentFrame = 0;
+
+	// Scene objects
+	Mesh m_MeshObject;
+
 	// -- Vulkan components
 	VkInstance m_Instance;
 	Devices m_MainDevice;
@@ -107,6 +113,7 @@ private:
 	VkExtent2D m_SwapchainExtent;
 
 	// - Synchronization
-	VkSemaphore m_SemaphoreImageAvailable;
-	VkSemaphore m_SemaphoreRenderFinished;
+	std::vector<VkSemaphore> m_SemaphoresImageAvailable;
+	std::vector<VkSemaphore> m_SemaphoresRenderFinished;
+	std::vector<VkFence> m_DrawFences;
 };

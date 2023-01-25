@@ -1,12 +1,20 @@
 #pragma once
 
 #include <fstream>
+#include <glm/glm.hpp>
+
+const int MAX_FRAME_DRAWS = 2;
 
 static const std::vector<const char*> s_DeviceExtensions = {
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
 
+struct Vertex
+{
+	glm::vec3 Position;
+
+};
 
 // Indices (locations) of queue families (if they exist at all)
 struct QueueFamilyIndices
