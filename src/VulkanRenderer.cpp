@@ -15,21 +15,40 @@ int VulkanRenderer::Init(GLFWwindow* window)
 		CreateInstance();
 		CreateSurface();
 		GetPhysicalDevice();
-		CreateLogicalDevice();
-
-		// Create mesh object
-		std::vector<Vertex> meshVertices = {
-			{{0.0, -0.4, 0.0}}, 
-			{{0.4, 0.4, 0.0}},
-			{{-0.4, 0.4, 0.0}}
-		};
-		m_MeshObject = Mesh(m_MainDevice.PhysicalDevice, m_MainDevice.LogicalDevice, &meshVertices);
-		
+		CreateLogicalDevice();		
 		CreateSwapChain();
 		CreateRenderPass();
 		CreateGraphicsPipeline();
 		CreateFramebuffers();
 		CreateCommandPool();
+
+		// Create mesh object
+
+		// vertex data
+		std::vector<Vertex> meshVertices = {
+			{{-0.1, -0.1, 0.0}, {1.0, 0.0, 0.0}},
+			{{0.1, -0.1, 0.0},  {0.0, 1.0, 0.0}},
+			{{0.1, 0.1, 0.0}, {0.0, 0.0, 1.0}},
+			{{-0.1, 0.1, 0.0}, {0.5, 0.2, 0.35}}
+		};
+
+		std::vector<Vertex> meshVertices2 = {
+			{{0.40, 0.40, 0.0}, {1.0, 0.0, 0.0}},
+			{{0.50, 0.40, 0.0},  {1.0, 1.0, 0.0}},
+			{{0.50, 0.50, 0.0}, {0.0, 1.0, 0.7}},
+			{{0.40, 0.50, 0.0}, {0.5, 0.2, 0.35}}
+		};
+		// index data
+		std::vector<uint32_t> meshIndices = {
+			0, 1, 2,
+			2, 3, 0
+		};
+
+		m_MeshList.push_back(Mesh(m_MainDevice.PhysicalDevice, m_MainDevice.LogicalDevice,
+			m_GraphicsQueue, m_GraphicsCommandPool, &meshVertices, &meshIndices));
+		m_MeshList.push_back(Mesh(m_MainDevice.PhysicalDevice, m_MainDevice.LogicalDevice,
+			m_GraphicsQueue, m_GraphicsCommandPool, &meshVertices2, &meshIndices));
+
 		CreateCommandBuffers();
 		RecordCommands();
 		CreateSynchronization();
@@ -105,7 +124,11 @@ void VulkanRenderer::CleanUp()
 	// Wait until no action being run on device before destroying
 	vkDeviceWaitIdle(m_MainDevice.LogicalDevice);
 
-	m_MeshObject.DestroyVertexBuffer();
+	for (auto& mesh : m_MeshList)
+	{
+		mesh.DestroyBuffers();
+	}
+	
 
 	for (size_t i = 0; i < MAX_FRAME_DRAWS; i++)
 	{
@@ -474,7 +497,7 @@ void VulkanRenderer::CreateGraphicsPipeline()
 																// VK_VERTEX_INPUT_RATE_INSTANCE: move to a vertex for next 
 
 	// How the data for an attribute is defined within a vertex
-	std::array<VkVertexInputAttributeDescription, 1> attributeDescriptions;
+	std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions;
 
 	// Position attribute
 	attributeDescriptions[0].binding = 0;
@@ -483,7 +506,10 @@ void VulkanRenderer::CreateGraphicsPipeline()
 	attributeDescriptions[0].offset = offsetof(Vertex, Position); // where this attribute is defined in the data for a single vertex
 
 	// Color attribute 
-	// To do
+	attributeDescriptions[1].binding = 0;
+	attributeDescriptions[1].location = 1;			// location in shader wherre data will be read from
+	attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;  // format the data will take (also it helps define size opf data)
+	attributeDescriptions[1].offset = offsetof(Vertex, Color); // where this attribute is defined in the data for a single vertex
 	
 	// Create PIPELINE
 	// -- Vertex Input (To do)
@@ -757,14 +783,21 @@ void VulkanRenderer::RecordCommands()
 				// Bind pipeline to be used in render pass
 				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
 				
-				VkBuffer vertexBuffers[] = { m_MeshObject.GetVertexBuffer() };	// Buffer to bind
-				VkDeviceSize offsets[] = { 0 };		// offsets into buffers being bound
-				vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, vertexBuffers, offsets);	// Command to bind vertex buffer before drawing with them
+				// Draw meshes
+				for (auto& mesh : m_MeshList)
+				{
+					VkBuffer vertexBuffers[] = { mesh.GetVertexBuffer() };	// Buffer to bind
+					VkDeviceSize offsets[] = { 0 };		// offsets into buffers being bound
+					vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, vertexBuffers, offsets);	// Command to bind vertex buffer before drawing with them
 
+					vkCmdBindIndexBuffer(m_CommandBuffers[i], mesh.GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
-				//vkCmdSetViewport(m_CommandBuffers[i],0,0,m_)
+					vkCmdDrawIndexed(m_CommandBuffers[i], mesh.GetIndexCount(), 1, 0, 0, 0);
+				}
+
+				
 				// Execute Pipeline
-				vkCmdDraw(m_CommandBuffers[i], static_cast<uint32_t>(m_MeshObject.GetVertexCount()), 1, 0, 0);
+				//vkCmdDraw(m_CommandBuffers[i], static_cast<uint32_t>(m_MeshObject.GetVertexCount()), 1, 0, 0);
 
 			// End Render Pass
 			vkCmdEndRenderPass(m_CommandBuffers[i]);
