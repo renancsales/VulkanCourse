@@ -30,10 +30,28 @@ int main()
 		return EXIT_FAILURE;
 
 
+	float angle = 0.0f;
+	float deltaTime = 0.0f;
+	float lastTime = 0.0f;
+
+
 	// lopp until closed
 	while (!glfwWindowShouldClose(g_Window))
 	{
 		glfwPollEvents();
+		
+		float currentTime = (float)glfwGetTime();
+		deltaTime = currentTime - lastTime;
+		lastTime = currentTime;
+
+		angle += 720.0f * deltaTime;
+		if (angle > 360.0f)
+			angle -= 360.f;
+
+
+		g_VulkanRenderer.UpdateModel(glm::rotate(glm::mat4(1.0f), glm::radians(angle), { 0.0f, 0.0f, 1.0f })
+			* glm::scale(glm::mat4(1.0f), {1.5f, 1.5f, 1.5f}));
+
 		g_VulkanRenderer.Draw();
 	}
 

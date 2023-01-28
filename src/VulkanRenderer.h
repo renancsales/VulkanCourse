@@ -4,6 +4,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <iostream>
 // Check only the generic errors
 #include <stdexcept>
@@ -37,6 +40,9 @@ public:
 
 public:
 	int Init(GLFWwindow* window);
+
+	void UpdateModel(glm::mat4 newModel);
+
 	void Draw();
 	void CleanUp();
 
@@ -47,11 +53,18 @@ private:
 	void CreateSurface();
 	void CreateSwapChain();
 	void CreateRenderPass();
+	void CreateDescriptorSetLayout();
 	void CreateGraphicsPipeline();
 	void CreateFramebuffers();
 	void CreateCommandPool();
 	void CreateCommandBuffers();
 	void CreateSynchronization();
+
+	void CreateUniformBuffers();
+	void CreateDescriptorPool();
+	void CreateDescriptorSets();
+
+	void UpdateUniformBuffer(uint32_t imageIndex);
 
 	// Recodrd functions
 	void RecordCommands();
@@ -86,6 +99,13 @@ private:
 
 	// Scene objects
 	std::vector<Mesh> m_MeshList;
+	// Scene settings
+	struct ModelViewProjectionMatrix {
+		glm::mat4 Projection;
+		glm::mat4 View;
+		glm::mat4 Model;
+
+	} m_ModelViewProjectMtx;
 
 	// -- Vulkan components
 	VkInstance m_Instance;
@@ -99,6 +119,14 @@ private:
 	std::vector<SwapChainImage> m_SwapChainImages;
 	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
 	std::vector<VkCommandBuffer> m_CommandBuffers;
+
+	// - Descriptors
+	VkDescriptorSetLayout m_DescriptorSetLayout;
+	VkDescriptorPool m_DescriptorPool;
+	std::vector<VkDescriptorSet> m_DescriptorSets;
+
+	std::vector<VkBuffer> m_UniformBuffers;
+	std::vector<VkDeviceMemory> m_UniformBufferMemory;
 
 	// -- Pipeline
 	VkPipeline m_GraphicsPipeline;
