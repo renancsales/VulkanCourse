@@ -7,6 +7,12 @@
 
 #include "Utils.h"
 
+struct UniformBufferObjectModel
+{
+	glm::mat4 Model;
+};
+
+
 class Mesh
 {
 public:
@@ -22,6 +28,9 @@ public:
 	VkBuffer GetVertexBuffer();
 	VkBuffer GetIndexBuffer() { return m_IndexBuffer; }
 
+	void SetModel(glm::mat4& model) { m_UBOModel.Model = model; };
+	UniformBufferObjectModel& GetUniformBufferModel() { return m_UBOModel; }
+
 	void DestroyBuffers();
 
 
@@ -33,6 +42,9 @@ private:
 		VkCommandPool transferCmdPool, std::vector<uint32_t>* indices);
 
 private:
+
+	UniformBufferObjectModel m_UBOModel;
+
 	size_t m_VertexCount;
 	VkBuffer m_VertexBuffer = nullptr;
 	VkDeviceMemory m_VertexBufferMemory;

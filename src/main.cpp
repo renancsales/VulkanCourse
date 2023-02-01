@@ -1,3 +1,5 @@
+#define GLFW_FORCE_DEPTH_ZERO_TO_ONE
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -34,7 +36,7 @@ int main()
 	float deltaTime = 0.0f;
 	float lastTime = 0.0f;
 
-
+	glm::mat4 modelMatrix;
 	// lopp until closed
 	while (!glfwWindowShouldClose(g_Window))
 	{
@@ -44,15 +46,19 @@ int main()
 		deltaTime = currentTime - lastTime;
 		lastTime = currentTime;
 
-		angle += 720.0f * deltaTime;
+		angle += 40 * deltaTime;
 		if (angle > 360.0f)
 			angle -= 360.f;
 
-
-		g_VulkanRenderer.UpdateModel(glm::rotate(glm::mat4(1.0f), glm::radians(angle), { 0.0f, 0.0f, 1.0f })
-			* glm::scale(glm::mat4(1.0f), {1.5f, 1.5f, 1.5f}));
+		modelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(angle), { 0.0f, 0.0f, 1.0f })
+			* glm::scale(glm::mat4(1.0f), { 1.5f, 1.5f, 1.5f });
+		g_VulkanRenderer.UpdateModel(1, modelMatrix);
+		modelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(-angle), { 0.0f, 0.0f, 1.0f })
+			* glm::scale(glm::mat4(1.0f), { 1.5f, 1.5f, 1.5f });
+		g_VulkanRenderer.UpdateModel(0, modelMatrix);
 
 		g_VulkanRenderer.Draw();
+		//std::cout << "Delta time: " << deltaTime << "s" << "  / FPS: " << 1.0 / deltaTime << std::endl;
 	}
 
 	

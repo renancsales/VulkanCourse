@@ -10,6 +10,8 @@ Mesh::Mesh(VkPhysicalDevice newPhysicalDevice, VkDevice newDevice, VkQueue trans
 	m_Device = newDevice;
 	CreateVertexBuffer(transferQueue, transferCmdPool, vertices);
 	CreateIndexBuffer(transferQueue, transferCmdPool, indices);
+
+	m_UBOModel.Model = glm::mat4(1.0f);
 }
 
 

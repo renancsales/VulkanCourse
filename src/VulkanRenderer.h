@@ -41,7 +41,7 @@ public:
 public:
 	int Init(GLFWwindow* window);
 
-	void UpdateModel(glm::mat4 newModel);
+	void UpdateModel(uint32_t meshObjectIndex, glm::mat4& newModel);
 
 	void Draw();
 	void CleanUp();
@@ -55,6 +55,7 @@ private:
 	void CreateRenderPass();
 	void CreateDescriptorSetLayout();
 	void CreateGraphicsPipeline();
+	void CreateDepthBufferImage();
 	void CreateFramebuffers();
 	void CreateCommandPool();
 	void CreateCommandBuffers();
@@ -64,13 +65,16 @@ private:
 	void CreateDescriptorPool();
 	void CreateDescriptorSets();
 
-	void UpdateUniformBuffer(uint32_t imageIndex);
+	void UpdateUniformBuffers(uint32_t imageIndex);
 
 	// Recodrd functions
-	void RecordCommands();
+	void RecordCommands(uint32_t currentImageIndex);
 
 	// Get functions
 	void GetPhysicalDevice();
+
+	// - Allocate functions
+	void AllocateDynamicBufferTransferSpace();
 
 	// Support functions
 	// -- Check functions
@@ -81,14 +85,19 @@ private:
 	QueueFamilyIndices GetQueueFamilies(VkPhysicalDevice device);
 	SwapChainDetails GetSwapChainDetails(VkPhysicalDevice device);
 
+
 	// -- pick functions
 	VkSurfaceFormatKHR ChooseBestSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
 	VkPresentModeKHR ChooseBestPresentationMode(const std::vector< VkPresentModeKHR>& presentationModes);
 	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities);
-	// validatation layer
+	VkFormat ChooseSupportedFormat(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags featureFlags);
+
+	// validation layer
 	bool CheckValidationLayerSupport();
 
 	// -- Create functions
+	VkImage CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
+		VkImageUsageFlags usageFlags, VkMemoryPropertyFlags propFlags, VkDeviceMemory* imageMemory);
 	VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
 	VkShaderModule CreateShaderModule(const std::vector<char>& code);
 	
@@ -100,12 +109,11 @@ private:
 	// Scene objects
 	std::vector<Mesh> m_MeshList;
 	// Scene settings
-	struct ModelViewProjectionMatrix {
+	struct Camera {
 		glm::mat4 Projection;
 		glm::mat4 View;
-		glm::mat4 Model;
 
-	} m_ModelViewProjectMtx;
+	} m_Camera;
 
 	// -- Vulkan components
 	VkInstance m_Instance;
@@ -120,6 +128,11 @@ private:
 	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
 	std::vector<VkCommandBuffer> m_CommandBuffers;
 
+	VkImage m_DepthBufferImage;
+	VkFormat m_DepthBufferFormat;
+	VkDeviceMemory m_DepthBufferImageMemory;
+	VkImageView m_DepthBufferImageView;
+
 	// - Descriptors
 	VkDescriptorSetLayout m_DescriptorSetLayout;
 	VkDescriptorPool m_DescriptorPool;
@@ -127,6 +140,13 @@ private:
 
 	std::vector<VkBuffer> m_UniformBuffers;
 	std::vector<VkDeviceMemory> m_UniformBufferMemory;
+
+	std::vector<VkBuffer> m_UniformDynamicBuffers;
+	std::vector<VkDeviceMemory> m_UniformDynamicBufferMemory;
+
+	VkDeviceSize m_MinUniformBufferOffset;
+	size_t m_ModelUniformAlignment;
+	UniformBufferObjectModel* m_ModelTransferSpace = nullptr;
 
 	// -- Pipeline
 	VkPipeline m_GraphicsPipeline;
@@ -139,6 +159,8 @@ private:
 	// Utilities
 	VkFormat m_SwapchainImageFormat;
 	VkExtent2D m_SwapchainExtent;
+	
+	
 
 	// - Synchronization
 	std::vector<VkSemaphore> m_SemaphoresImageAvailable;
