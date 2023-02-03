@@ -15,6 +15,10 @@
 #include <algorithm>
 #include <array>
 
+// stb_image
+#include <stb_image.h>
+
+
 #include "Mesh.h"
 #include "Utils.h"
 
@@ -100,6 +104,11 @@ private:
 		VkImageUsageFlags usageFlags, VkMemoryPropertyFlags propFlags, VkDeviceMemory* imageMemory);
 	VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
 	VkShaderModule CreateShaderModule(const std::vector<char>& code);
+
+	int CreateTexture(const std::string& filename);
+
+	// Loader-functions
+	stbi_uc* LoadTextureFile(const std::string& fileName, int* width, int* height, VkDeviceSize* imageSize);
 	
 private:
 	GLFWwindow* m_Window;
@@ -147,6 +156,11 @@ private:
 	VkDeviceSize m_MinUniformBufferOffset;
 	size_t m_ModelUniformAlignment;
 	UniformBufferObjectModel* m_ModelTransferSpace = nullptr;
+
+
+	// -- Assets
+	std::vector<VkImage> m_TextureImages;
+	std::vector<VkDeviceMemory> m_TextureImageMemory;
 
 	// -- Pipeline
 	VkPipeline m_GraphicsPipeline;
