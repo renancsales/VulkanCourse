@@ -7,6 +7,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+
 #include <iostream>
 // Check only the generic errors
 #include <stdexcept>
@@ -20,6 +24,7 @@
 
 
 #include "Mesh.h"
+#include "MeshModel.h"
 #include "Utils.h"
 
 
@@ -60,18 +65,22 @@ private:
 	void CreateDescriptorSetLayout();
 	void CreateGraphicsPipeline();
 	void CreateDepthBufferImage();
+	void CreateColorBufferImage();
 	void CreateFramebuffers();
 	void CreateCommandPool();
 	void CreateCommandBuffers();
 	void CreateSynchronization();
 
+	void CreateTextureSampler();
+
 	void CreateUniformBuffers();
 	void CreateDescriptorPool();
 	void CreateDescriptorSets();
+	void CreateInputDescriptorSets();
 
 	void UpdateUniformBuffers(uint32_t imageIndex);
 
-	// Recodrd functions
+	// Record functions
 	void RecordCommands(uint32_t currentImageIndex);
 
 	// Get functions
@@ -105,11 +114,15 @@ private:
 	VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
 	VkShaderModule CreateShaderModule(const std::vector<char>& code);
 
-	int CreateTexture(const std::string& filename);
+	int CreateTextureImage(const std::string& filepath);
+	int CreateTexture(const std::string& filepath);
+	int CreateTextureDescriptor(VkImageView textureImage);
+
+	void CreateMeshModel(const std::string& filepath);
 
 	// Loader-functions
 	stbi_uc* LoadTextureFile(const std::string& fileName, int* width, int* height, VkDeviceSize* imageSize);
-	
+
 private:
 	GLFWwindow* m_Window;
 
@@ -137,15 +150,31 @@ private:
 	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
 	std::vector<VkCommandBuffer> m_CommandBuffers;
 
-	VkImage m_DepthBufferImage;
+	// Color buffer image
+	std::vector<VkImage> m_ColorBufferImage;
+	std::vector<VkDeviceMemory> m_ColorBufferImageMemory;
+	std::vector<VkImageView> m_ColorBufferImageView;
+	// depth buffer image
+	std::vector<VkImage> m_DepthBufferImage;
+	std::vector<VkDeviceMemory> m_DepthBufferImageMemory;
+	std::vector<VkImageView> m_DepthBufferImageView;
 	VkFormat m_DepthBufferFormat;
-	VkDeviceMemory m_DepthBufferImageMemory;
-	VkImageView m_DepthBufferImageView;
+
+	// Texture sampler
+	VkSampler m_TextureSampler;
 
 	// - Descriptors
 	VkDescriptorSetLayout m_DescriptorSetLayout;
+	VkDescriptorSetLayout m_SamplerDescriptorSetLayout;
+	VkDescriptorSetLayout m_InputDescriptorSetLayout;
+	
 	VkDescriptorPool m_DescriptorPool;
+	VkDescriptorPool m_SamplerDescriptorPool;
+	VkDescriptorPool m_InputDescriptorPool;
+
 	std::vector<VkDescriptorSet> m_DescriptorSets;
+	std::vector<VkDescriptorSet> m_SamplerDescriptorSets;
+	std::vector<VkDescriptorSet> m_InputDescriptorSets;
 
 	std::vector<VkBuffer> m_UniformBuffers;
 	std::vector<VkDeviceMemory> m_UniformBufferMemory;
@@ -159,13 +188,19 @@ private:
 
 
 	// -- Assets
+	std::vector<MeshModel> m_ModelList;
+
 	std::vector<VkImage> m_TextureImages;
 	std::vector<VkDeviceMemory> m_TextureImageMemory;
+	std::vector<VkImageView> m_TextureImageViews;
 
 	// -- Pipeline
 	VkPipeline m_GraphicsPipeline;
 	VkPipelineLayout m_PipelineLayout;
 	VkRenderPass m_RenderPass;
+
+	VkPipeline m_SecondPipeline;
+	VkPipelineLayout m_SecondPipelineLayout;
 
 	// -- Pools
 	VkCommandPool m_GraphicsCommandPool;
@@ -174,8 +209,6 @@ private:
 	VkFormat m_SwapchainImageFormat;
 	VkExtent2D m_SwapchainExtent;
 	
-	
-
 	// - Synchronization
 	std::vector<VkSemaphore> m_SemaphoresImageAvailable;
 	std::vector<VkSemaphore> m_SemaphoresRenderFinished;

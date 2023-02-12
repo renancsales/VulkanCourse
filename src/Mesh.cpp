@@ -2,7 +2,7 @@
 
 
 Mesh::Mesh(VkPhysicalDevice newPhysicalDevice, VkDevice newDevice, VkQueue transferQueue,
-	VkCommandPool transferCmdPool, std::vector<Vertex>* vertices, std::vector<uint32_t>* indices)
+	VkCommandPool transferCmdPool, std::vector<Vertex>* vertices, std::vector<uint32_t>* indices, int textureID)
 {
 	m_IndexCount = indices->size();
 	m_VertexCount = vertices->size();
@@ -12,11 +12,14 @@ Mesh::Mesh(VkPhysicalDevice newPhysicalDevice, VkDevice newDevice, VkQueue trans
 	CreateIndexBuffer(transferQueue, transferCmdPool, indices);
 
 	m_UBOModel.Model = glm::mat4(1.0f);
+	m_TextureID = textureID;
+
 }
 
 
 Mesh::~Mesh()
 {
+	//DestroyBuffers();
 }
 
 int Mesh::GetVertexCount()

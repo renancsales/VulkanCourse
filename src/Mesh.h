@@ -18,7 +18,8 @@ class Mesh
 public:
 	Mesh() = default;
 	Mesh(VkPhysicalDevice newPhysicalDevice, VkDevice newDevice, VkQueue transferQueue,
-		VkCommandPool transferCmdPool, std::vector<Vertex>* vertices, std::vector<uint32_t>* indices);
+		VkCommandPool transferCmdPool, std::vector<Vertex>* vertices, std::vector<uint32_t>* indices,
+		int textureID);
 
 	~Mesh();
 
@@ -29,7 +30,8 @@ public:
 	VkBuffer GetIndexBuffer() { return m_IndexBuffer; }
 
 	void SetModel(glm::mat4& model) { m_UBOModel.Model = model; };
-	UniformBufferObjectModel& GetUniformBufferModel() { return m_UBOModel; }
+	UniformBufferObjectModel GetUniformBufferModel() { return m_UBOModel; }
+	int GetTextureID() { return m_TextureID; };
 
 	void DestroyBuffers();
 
@@ -44,6 +46,8 @@ private:
 private:
 
 	UniformBufferObjectModel m_UBOModel;
+
+	int m_TextureID;
 
 	size_t m_VertexCount;
 	VkBuffer m_VertexBuffer = nullptr;

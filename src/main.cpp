@@ -26,7 +26,7 @@ void initWindow(std::string wname = "test window", const int width = 800, const 
 int main()
 {
 	// Create window
-	initWindow("Main window", 800, 600);
+	initWindow("Main window", 1000, 750);
 
 	// Create vulkan renderer instance
 	if (g_VulkanRenderer.Init(g_Window) == EXIT_FAILURE)
@@ -47,19 +47,22 @@ int main()
 		deltaTime = currentTime - lastTime;
 		lastTime = currentTime;
 
-		angle += 40 * deltaTime;
+		angle += 50 * deltaTime;
 		if (angle > 360.0f)
 			angle -= 360.f;
-
-		modelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(angle), { 0.0f, 0.0f, 1.0f })
-			* glm::scale(glm::mat4(1.0f), { 1.5f, 1.5f, 1.5f });
-		g_VulkanRenderer.UpdateModel(1, modelMatrix);
-		modelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(-angle), { 0.0f, 0.0f, 1.0f })
-			* glm::scale(glm::mat4(1.0f), { 1.5f, 1.5f, 1.5f });
+		 
+		modelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(-angle), { 0.0f, 1.0f, 0.0f })
+			* glm::scale(glm::mat4(1.0f), { 0.5f, 0.5f, 0.5f });
 		g_VulkanRenderer.UpdateModel(0, modelMatrix);
+		modelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(angle), { 0.0f, 1.0f, 0.0f })* glm::translate(glm::mat4(1.0f), { 2.0f, 1.0f, 0.0f })
+			* glm::scale(glm::mat4(1.0f), { 0.06f, 0.06f, 0.06f });
+		g_VulkanRenderer.UpdateModel(1, modelMatrix);
+		modelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(-angle), { 0.0f, 1.0f, 0.0f }) * glm::translate(glm::mat4(1.0f), { 4.0f, 0.0f, 0.0f })
+			* glm::scale(glm::mat4(1.0f), { 0.20f, 0.20f, 0.20f });
+		g_VulkanRenderer.UpdateModel(2, modelMatrix);
 
 		g_VulkanRenderer.Draw();
-		//std::cout << "Delta time: " << deltaTime << "s" << "  / FPS: " << 1.0 / deltaTime << std::endl;
+		std::cout << "Delta time: " << deltaTime << "s" << "  / FPS: " << 1.0 / deltaTime << std::endl;
 	}
 
 	
